@@ -5,6 +5,8 @@ from contextlib import closing
 from selenium.webdriver import Firefox
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium import webdriver
+from selenium.common.exceptions import NoSuchElementException
+from selenium.common.exceptions import TimeoutException
 import requests
 import json
 import sys
@@ -28,7 +30,8 @@ tank_classes = {"Death Knight":"Blood", "Druid":"Guardian", "Monk":"Brewmaster",
 
 api_key = "b3a3c2ec50990fbf5a7f10ca5cbd6d4c"
 api_url = "https://www.warcraftlogs.com:443/v1/rankings/encounter/"
-limit = 10
+limit = 200
+TIMEOUT = 20
 		
 def get_reports_for_spec(tank, spec, encounter_id):
 	
@@ -109,21 +112,40 @@ def main():
 		for r in reports:
 			#uprint("report", cur_report, r)
 			#log.writeline("report " + str(cur_report) +" "+ r[0] + " " + r[1])
-			uprint("report", cur_report, r)
-			uprint("report", cur_report, r, file=log)
+			uprint("fetching report", cur_report, r)
+			uprint("fetching report", cur_report, r, file=log)
 			url = r[0]
 			playername = r[1]
 			browser.get("about:blank")
 			browser.get(url)
-			WebDriverWait(browser, timeout=20).until(lambda x: x.find_element_by_id('main-table-0'))
+			try:
+				WebDriverWait(browser, timeout=TIMEOUT).until(lambda x: x.find_element_by_id('main-table-0'))
+			except TimeoutException as e:
+				uprint("Timeout except:", e, file=log)
+				uprint("report fetch timeout, skipping")
+				cur_report += 1
+				continue
 			
-			row = browser.find_element_by_xpath("//*[text()[contains(.,'"+playername+"') ] ]/ancestor::tr[@role='row']")
+			row = None
+			try:
+				row = browser.find_element_by_xpath("//*[text()[contains(.,'"+playername+"') ] ]/ancestor::tr[@role='row']")
+			except NoSuchElementException as e:
+				uprint("No element except:", e, file=log)
+				uprint("No element found, skipping")
+				cur_report += 1
+				continue
+			
+			if row is None:
+				print("row is None, something went wrong, skipping this report")
+				print("row is None, something went wrong, skipping this report", file=log)
+				cur_report += 1
+				continue
 			data = row.text.split('\n')
 			damage_taken = data[2]
 			dtps = data[3].split(" ")[3]
 			dtps = dtps.replace(",","")
 			#log.write(playername +" " + damage_taken +" "+ dtps)
-			uprint(playername, damage_taken, dtps)
+			#uprint(playername, damage_taken, dtps)
 			uprint(playername, damage_taken, dtps, file=log)
 			if damage_taken[-1] != "m":
 				print("< 1m damage taken, skipping")
